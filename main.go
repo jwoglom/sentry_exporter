@@ -22,8 +22,9 @@ import (
 	"syscall"
 	"time"
 
-	"gopkg.in/yaml.v2"
 	"sync"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -184,14 +185,17 @@ func main() {
 			}
 		})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`<html>
+		_, err := w.Write([]byte(`<html>
             <head><title>Sentry Exporter</title></head>
             <body>
             <h1>Sentry Exporter</h1>
             <p><a href="/probe?target=apimutate">Probe sentry project</a></p>
             <p><a href="/metrics">Metrics</a></p>
             </body>
-            </html>`))
+			</html>`))
+		if err != nil {
+			log.Fatal(err)
+		}
 	})
 
 	log.Infoln("Listening on", *listenAddress)
