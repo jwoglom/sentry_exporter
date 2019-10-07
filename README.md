@@ -1,5 +1,8 @@
 # Sentry exporter
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/vptech/sentry-exporter.svg?maxAge=604800)][hub]
+[![Go Report Card](https://goreportcard.com/badge/github.com/strike-team/sentry_exporter)][goreportcard]
+
 An exporter for [Prometheus](https://prometheus.io/) that collects metrics from [Sentry](https://sentry.io).
 
 ## Install
@@ -70,3 +73,6 @@ scrape_configs:
       - target_label: __address__
         replacement: 127.0.0.1:9412  # The sentry exporter's real hostname:port.
 ```
+
+[hub]: https://hub.docker.com/r/vptech/sentry-exporter/
+[goreportcard]: https://goreportcard.com/report/github.com/strike-team/sentry_exporter
