@@ -1,8 +1,10 @@
-FROM quay.io/prometheus/busybox:latest
+ARG ARCH="amd64"
+ARG OS="linux"
+FROM quay.io/prometheus/busybox-${OS}-${ARCH}:latest
 
-COPY sentry_exporter  /bin/sentry_exporter
-COPY sentry_exporter.yml       /etc/sentry_exporter/config.yml
+ARG ARCH="amd64"
+ARG OS="linux"
+COPY .build/${OS}-${ARCH}/sentry_exporter   /bin/sentry_exporter
 
-EXPOSE      9412
-ENTRYPOINT  [ "/bin/sentry_exporter" ]
-CMD         [ "-config.file=/etc/sentry_exporter/config.yml" ]
+EXPOSE     9412
+ENTRYPOINT [ "/bin/sentry_exporter" ]
