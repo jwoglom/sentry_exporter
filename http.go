@@ -13,6 +13,8 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -40,19 +42,38 @@ func extractErrorRate(reader io.Reader, config HTTPProbe) int {
 	return 0
 }
 
-func probeHTTP(target string, w http.ResponseWriter, module Module) (success bool) {
-	config := module.HTTP
+type RateLimitResponse struct {
+	Window int
+	Count int
+}
 
-	client := &http.Client{
-		Timeout: module.Timeout,
+type ProjectKeyResponse struct {
+	ID string
+	Name string
+	Label string
+	RateLimit *RateLimitResponse
+}
+
+func extractRateLimit(reader io.Reader, config HTTPProbe) int {
+	var keys []ProjectKeyResponse
+	body, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return 0
 	}
+	err = json.Unmarshal([]byte(body), &keys)
+	if err != nil || len(keys) == 0 || keys[0].RateLimit == nil {
+		return 0
+	}
+	return keys[0].RateLimit.Count
+}
 
-	requestURL := config.Prefix + target + "/stats/"
+func requestSentry(path string, config HTTPProbe, client *http.Client) (*http.Response, error) {
+	requestURL := config.Prefix + path
 
 	request, err := http.NewRequest("GET", requestURL, nil)
 	if err != nil {
-		log.Errorf("Error creating request for target %s: %s", target, err)
-		return
+		log.Errorf("Error creating request for target %s: %s", path, err)
+		return &http.Response{}, err
 	}
 
 	for key, value := range config.Headers {
@@ -65,30 +86,51 @@ func probeHTTP(target string, w http.ResponseWriter, module Module) (success boo
 
 	resp, err := client.Do(request)
 	// Err won't be nil if redirects were turned off. See https://github.com/golang/go/issues/3795
-	if err != nil && resp == nil {
-		log.Warnf("Error for HTTP request to %s: %s", target, err)
+	if err != nil {
+		log.Warnf("Error for HTTP request to %s: %s", path, err)
 	} else {
-		defer resp.Body.Close()
 		if len(config.ValidStatusCodes) != 0 {
 			for _, code := range config.ValidStatusCodes {
 				if resp.StatusCode == code {
-					success = true
-					break
+					return resp, nil
 				}
 			}
 		} else if 200 <= resp.StatusCode && resp.StatusCode < 300 {
-			success = true
-		}
-		if success {
-			fmt.Fprintf(w, "probe_sentry_error_received %d\n", extractErrorRate(resp.Body, config))
+			return resp, nil
 		}
 	}
-	if resp == nil {
-		resp = &http.Response{}
+	return &http.Response{}, errors.New("Invalid response from Sentry API")
+}
+
+func requestErrorReceived(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter) {
+	resp, err := requestSentry(target + "/stats/", config, client)
+
+	if err == nil {
+		defer resp.Body.Close()
+		fmt.Fprintf(w, "probe_sentry_error_received %d\n", extractErrorRate(resp.Body, config))
 	}
-
-	fmt.Fprintf(w, "probe_sentry_status_code %d\n", resp.StatusCode)
-	fmt.Fprintf(w, "probe_sentry_content_length %d\n", resp.ContentLength)
-
 	return
+}
+
+func requestRateLimit(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter) {
+	resp, err := requestSentry(target + "/keys/", config, client)
+
+	if err == nil {
+		defer resp.Body.Close()
+		fmt.Fprintf(w, "probe_sentry_rate_limit_minute %d\n", extractRateLimit(resp.Body, config))
+	}
+	return
+}
+
+func probeHTTP(target string, w http.ResponseWriter, module Module) (bool) {
+	config := module.HTTP
+
+	client := &http.Client{
+		Timeout: module.Timeout,
+	}
+
+	requestErrorReceived(target, config, client, w)
+	requestRateLimit(target, config, client, w)
+
+	return true
 }
