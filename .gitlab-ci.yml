@@ -14,9 +14,6 @@
 
 # docker template
 .build-docker:
-  tags:
-    - docker
-    - dind
   stage: docker
   image: ${CI_REGISTRY}/docker:latest
   artifacts:
@@ -24,7 +21,10 @@
     paths:
       - image
   services:
-    - ${CI_REGISTRY}/docker:dind
+    - name: ${CI_REGISTRY}/docker:dind
+      alias: docker
+  tags:
+     - dind
   variables:
     DOCKER_DRIVER: overlay
   before_script:
@@ -32,13 +32,13 @@
 
 # push template
 .push:
-  tags:
-    - docker
-    - dind
   stage: push
   image: ${CI_REGISTRY}/docker:latest
   services:
-    - ${CI_REGISTRY}/docker:dind
+    - name: ${CI_REGISTRY}/docker:dind
+      alias: docker
+  tags:
+     - dind
   variables:
     DOCKER_DRIVER: overlay
   before_script:
