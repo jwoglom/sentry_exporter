@@ -109,7 +109,6 @@ func requestErrorReceived(target string, config HTTPProbe, client *http.Client, 
 		defer resp.Body.Close()
 		fmt.Fprintf(w, "probe_sentry_error_received %d\n", extractErrorRate(resp.Body, config))
 	}
-	return
 }
 
 func requestRateLimit(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter) {
@@ -119,7 +118,6 @@ func requestRateLimit(target string, config HTTPProbe, client *http.Client, w ht
 		defer resp.Body.Close()
 		fmt.Fprintf(w, "probe_sentry_rate_limit_minute %d\n", extractRateLimit(resp.Body, config))
 	}
-	return
 }
 
 func probeHTTP(target string, w http.ResponseWriter, module Module) (bool) {
