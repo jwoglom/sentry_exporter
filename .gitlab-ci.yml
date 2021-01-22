@@ -4,7 +4,7 @@
 # build template
 .build:
   stage: build
-  image: golang:1.13
+  image: ${CI_REGISTRY}/golang:1.13
   artifacts:
     expire_in: 1 day
     paths:
@@ -18,13 +18,13 @@
     - docker
     - dind
   stage: docker
-  image: docker:latest
+  image: ${CI_REGISTRY}/docker:latest
   artifacts:
     expire_in: 1 day
     paths:
       - image
   services:
-    - docker:dind
+    - ${CI_REGISTRY}/docker:dind
   variables:
     DOCKER_DRIVER: overlay
   before_script:
@@ -36,9 +36,9 @@
     - docker
     - dind
   stage: push
-  image: docker:latest
+  image: ${CI_REGISTRY}/docker:latest
   services:
-    - docker:dind
+    - ${CI_REGISTRY}/docker:dind
   variables:
     DOCKER_DRIVER: overlay
   before_script:
@@ -54,13 +54,13 @@ stages:
 # test
 dockerlint:
   stage: lint
-  image: vptech/linter:docker
+  image: ${CI_REGISTRY}/vptech/linter:docker
   script:
     - find . -type f -name "Dockerfile" | xargs -I {} dockerlint {}
 
 golang:
   stage: lint
-  image: golang:1.13
+  image: ${CI_REGISTRY}/golang:1.13
   script:
     - make lint
 
