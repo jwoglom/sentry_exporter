@@ -54,7 +54,7 @@ type ProjectKeyResponse struct {
 	RateLimit *RateLimitResponse
 }
 
-func extractRateLimit(reader io.Reader, config HTTPProbe) int {
+func extractRateLimit(reader io.Reader, config HTTPProbe) float64 {
 	var keys []ProjectKeyResponse
 	body, err := ioutil.ReadAll(reader)
 	if err != nil {
@@ -64,7 +64,7 @@ func extractRateLimit(reader io.Reader, config HTTPProbe) int {
 	if err != nil || len(keys) == 0 || keys[0].RateLimit == nil {
 		return 0
 	}
-	return keys[0].RateLimit.Count
+	return float64(keys[0].RateLimit.Count) / float64(keys[0].RateLimit.Window)
 }
 
 func requestSentry(path string, config HTTPProbe, client *http.Client) (*http.Response, error) {
@@ -116,7 +116,7 @@ func requestRateLimit(target string, config HTTPProbe, client *http.Client, w ht
 
 	if err == nil {
 		defer resp.Body.Close()
-		fmt.Fprintf(w, "probe_sentry_rate_limit_minute %d\n", extractRateLimit(resp.Body, config))
+		fmt.Fprintf(w, "sentry_rate_limit_seconds_total %f\n", extractRateLimit(resp.Body, config))
 	}
 }
 
