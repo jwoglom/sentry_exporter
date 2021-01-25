@@ -102,12 +102,12 @@ func requestSentry(path string, config HTTPProbe, client *http.Client) (*http.Re
 	return &http.Response{}, errors.New("Invalid response from Sentry API")
 }
 
-func requestErrorReceived(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter) {
-	resp, err := requestSentry(target + "/stats/", config, client)
+func requestEventCount(target string, stat string, config HTTPProbe, client *http.Client, w http.ResponseWriter) {
+	resp, err := requestSentry(target + "/stats/?stat=" + stat, config, client)
 
 	if err == nil {
 		defer resp.Body.Close()
-		fmt.Fprintf(w, "probe_sentry_error_received %d\n", extractErrorRate(resp.Body, config))
+		fmt.Fprintf(w, "sentry_events_total{stat=\"" + stat + "\"} %d\n", extractErrorRate(resp.Body, config))
 	}
 }
 
@@ -127,7 +127,8 @@ func probeHTTP(target string, w http.ResponseWriter, module Module) (bool) {
 		Timeout: module.Timeout,
 	}
 
-	requestErrorReceived(target, config, client, w)
+	requestEventCount(target, "received", config, client, w)
+	requestEventCount(target, "rejected", config, client, w)
 	requestRateLimit(target, config, client, w)
 
 	return true
