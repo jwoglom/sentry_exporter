@@ -1,3 +1,6 @@
+## 0.3.1 / 2020-02-01
+* [BUGFIX] Fix project's stats of the last minute
+
 ## 0.3.0 / 2020-02-01
 * [CHANGE] Only request the project's stats of the last minute
 
