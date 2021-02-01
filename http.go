@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/prometheus/common/log"
 )
@@ -103,7 +104,9 @@ func requestSentry(path string, config HTTPProbe, client *http.Client) (*http.Re
 }
 
 func requestEventCount(target string, stat string, config HTTPProbe, client *http.Client, w http.ResponseWriter) {
-	resp, err := requestSentry(target + "/stats/?stat=" + stat, config, client)
+	// Get the last minute stats
+	var lastMin = strconv.FormatInt(time.Now().Unix() - 60, 10)
+	resp, err := requestSentry(target + "/stats/?resolution=1h&stat=" + stat + "&since=" + lastMin, config, client)
 
 	if err == nil {
 		defer resp.Body.Close()
