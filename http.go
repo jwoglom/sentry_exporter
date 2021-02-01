@@ -19,7 +19,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -28,19 +27,21 @@ import (
 )
 
 func extractErrorRate(reader io.Reader, config HTTPProbe) int {
-	var re = regexp.MustCompile(`(\d+)]]$`)
+	var stats [][]int
+	count := 0
 	body, err := ioutil.ReadAll(reader)
 	if err != nil {
-		log.Errorf("Error reading HTTP body: %s", err)
 		return 0
 	}
-	var str = string(body)
-	matches := re.FindStringSubmatch(str)
-	value, err := strconv.Atoi(matches[1])
-	if err == nil {
-		return value
+	err = json.Unmarshal([]byte(body), &stats)
+	if err != nil {
+		return 0
 	}
-	return 0
+	// ignore the last timestamp
+	for i:=0; i < len(stats) - 1; i++ {
+		count = count + stats[i][1]
+	}
+	return count
 }
 
 type RateLimitResponse struct {
@@ -106,7 +107,7 @@ func requestSentry(path string, config HTTPProbe, client *http.Client) (*http.Re
 func requestEventCount(target string, stat string, config HTTPProbe, client *http.Client, w http.ResponseWriter) {
 	// Get the last minute stats
 	var lastMin = strconv.FormatInt(time.Now().Unix() - 60, 10)
-	resp, err := requestSentry(target + "/stats/?resolution=1h&stat=" + stat + "&since=" + lastMin, config, client)
+	resp, err := requestSentry(target + "/stats/?resolution=10s&stat=" + stat + "&since=" + lastMin, config, client)
 
 	if err == nil {
 		defer resp.Body.Close()
