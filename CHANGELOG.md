@@ -1,3 +1,6 @@
+## 0.3.0 / 2020-02-01
+* [CHANGE] Only request the project's stats of the last minute
+
 ## 0.2.0 / 2020-01-25
 * [ENHANCEMENT] Scrape project's rate limit of the default key
 * [ENHANCEMENT] Scrape events count by received and rejected stat
