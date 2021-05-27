@@ -8,6 +8,8 @@ An exporter for [Prometheus](https://prometheus.io/) that collects metrics from 
 
 You can download prebuilt binaries from [GitHub releases](https://github.com/jwoglom/sentry_exporter/releases)
 
+View prebuilt Docker images on [Docker Hub](http://hub.docker.com/r/jwoglom/sentry_exporter)
+
 ## Building and running
 
 ### Local Build
