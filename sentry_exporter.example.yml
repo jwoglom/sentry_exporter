@@ -1,0 +1,10 @@
+modules:
+  sentry:
+    prober: http
+    timeout: 5s
+    http:
+      domain: https://your-sentry-url
+      organization: sentry
+      ratelimit: false
+      headers:
+        Authorization: Bearer input-sentry-token-here

@@ -21,42 +21,29 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/prometheus/common/log"
 )
 
-func extractErrorRate(reader io.Reader, config HTTPProbe) int {
-	var stats [][]int
-	count := 0
-	body, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return 0
-	}
-	err = json.Unmarshal([]byte(body), &stats)
-	if err != nil {
-		return 0
-	}
-	// ignore the last timestamp
-	for i:=0; i < len(stats) - 1; i++ {
-		count = count + stats[i][1]
-	}
-	return count
-}
-
 type RateLimitResponse struct {
 	Window int
-	Count int
+	Count  int
 }
 
 type ProjectKeyResponse struct {
-	ID string
-	Name string
-	Label string
+	ID        string
+	Name      string
+	Label     string
 	RateLimit *RateLimitResponse
 }
 
-func extractRateLimit(reader io.Reader, config HTTPProbe) float64 {
+type ProjectListResponse struct {
+	Slug string
+}
+
+func extractRateLimit(reader io.Reader) float64 {
 	var keys []ProjectKeyResponse
 	body, err := ioutil.ReadAll(reader)
 	if err != nil {
@@ -69,8 +56,43 @@ func extractRateLimit(reader io.Reader, config HTTPProbe) float64 {
 	return float64(keys[0].RateLimit.Count) / float64(keys[0].RateLimit.Window)
 }
 
+func extractErrorRate(reader io.Reader) int {
+	var stats [][]int
+	count := 0
+	body, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return 0
+	}
+	err = json.Unmarshal([]byte(body), &stats)
+	if err != nil {
+		return 0
+	}
+	// ignore the last timestamp
+	for i := 0; i < len(stats)-1; i++ {
+		count = count + stats[i][1]
+	}
+	return count
+}
+
+func extractSentryProjects(reader io.Reader) []string {
+	var resp []ProjectListResponse
+	var projects []string
+	body, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return projects
+	}
+	err = json.Unmarshal([]byte(body), &resp)
+	if err != nil {
+		return projects
+	}
+	for _, p := range resp {
+		projects = append(projects, p.Slug)
+	}
+	return projects
+}
+
 func requestSentry(path string, config HTTPProbe, client *http.Client) (*http.Response, error) {
-	requestURL := config.Prefix + path
+	requestURL := config.Domain + "/api/0/" + path
 
 	request, err := http.NewRequest("GET", requestURL, nil)
 	if err != nil {
@@ -106,34 +128,73 @@ func requestSentry(path string, config HTTPProbe, client *http.Client) (*http.Re
 
 func requestEventCount(target string, stat string, config HTTPProbe, client *http.Client, w http.ResponseWriter) {
 	// Get the last minute stats
-	var lastMin = strconv.FormatInt(time.Now().Unix() - 60, 10)
-	resp, err := requestSentry(target + "/stats/?resolution=10s&stat=" + stat + "&since=" + lastMin, config, client)
+	var lastMin = strconv.FormatInt(time.Now().Unix()-60, 10)
+	resp, err := requestSentry("projects/"+config.Organization+"/"+target+"/stats/?resolution=10s&stat="+stat+"&since="+lastMin, config, client)
 
 	if err == nil {
 		defer resp.Body.Close()
-		fmt.Fprintf(w, "sentry_events_total{stat=\"" + stat + "\"} %d\n", extractErrorRate(resp.Body, config))
+		fmt.Fprintf(w, "sentry_events_total{stat=\""+stat+"\",project=\""+target+"\"} %d\n", extractErrorRate(resp.Body))
 	}
 }
 
 func requestRateLimit(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter) {
-	resp, err := requestSentry(target + "/keys/", config, client)
+	resp, err := requestSentry("projects/"+config.Organization+"/"+target+"/keys/", config, client)
 
 	if err == nil {
 		defer resp.Body.Close()
-		fmt.Fprintf(w, "sentry_rate_limit_seconds_total %f\n", extractRateLimit(resp.Body, config))
+		fmt.Fprintf(w, "sentry_rate_limit_seconds_total{project=\""+target+"\"} %f\n", extractRateLimit(resp.Body))
 	}
 }
 
-func probeHTTP(target string, w http.ResponseWriter, module Module) (bool) {
+func allSentryProjects(config HTTPProbe, client *http.Client, w http.ResponseWriter) []string {
+	resp, err := requestSentry("organizations/"+config.Organization+"/projects/", config, client)
+
+	if err == nil {
+		projects := extractSentryProjects(resp.Body)
+		fmt.Fprintf(w, "sentry_projects_total %d\n", len(projects))
+		return projects
+	}
+
+	return []string{}
+}
+
+func probeProject(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter, wg *sync.WaitGroup) {
+	defer wg.Done()
+	requestEventCount(target, "received", config, client, w)
+	requestEventCount(target, "rejected", config, client, w)
+	if config.RateLimit {
+		requestRateLimit(target, config, client, w)
+	}
+	log.Infof("Processed project %s\n", target)
+}
+
+var allProjectsCache []string
+
+func probeHTTP(target string, w http.ResponseWriter, module Module) bool {
 	config := module.HTTP
 
 	client := &http.Client{
 		Timeout: module.Timeout,
 	}
 
-	requestEventCount(target, "received", config, client, w)
-	requestEventCount(target, "rejected", config, client, w)
-	requestRateLimit(target, config, client, w)
+	var targets []string
+	if target != "" {
+		targets = append(targets, target)
+	} else if len(allProjectsCache) == 0 {
+		targets = allSentryProjects(config, client, w)
+	} else {
+		targets = allProjectsCache
+	}
+	log.Infof("Processing probe for %d Sentry projects\n", len(targets))
+
+	var wg sync.WaitGroup
+	for _, t := range targets {
+		wg.Add(1)
+		go probeProject(t, config, client, w, &wg)
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	wg.Wait()
 
 	return true
 }

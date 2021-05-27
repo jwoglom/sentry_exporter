@@ -1,5 +1,7 @@
 module github.com/strike-team/sentry_exporter
 
+go 1.15
+
 require (
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
 	github.com/google/go-cmp v0.3.1 // indirect

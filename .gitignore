@@ -3,3 +3,4 @@
 /.tarballs
 /sentry_exporter
 *.tar.gz
+sentry_exporter.yml

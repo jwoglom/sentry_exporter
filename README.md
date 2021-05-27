@@ -1,13 +1,12 @@
 # Sentry exporter
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/vptech/sentry-exporter.svg?maxAge=604800)][hub]
-[![Go Report Card](https://goreportcard.com/badge/github.com/strike-team/sentry_exporter)][goreportcard]
+Fork of https://github.com/veepee-oss/sentry_exporter
 
 An exporter for [Prometheus](https://prometheus.io/) that collects metrics from [Sentry](https://sentry.io).
 
 ## Install
 
-You can download prebuilt binaries from [GitHub releases](https://github.com/snakecharmer/sentry_exporter/releases)
+You can download prebuilt binaries from [GitHub releases](https://github.com/jwoglom/sentry_exporter/releases)
 
 ## Building and running
 
@@ -29,7 +28,9 @@ gox
 ```
 
 Visiting [http://localhost:9412/probe?target={sentry_project}](http://localhost:9412/probe?target=google.com)
-will return metrics for a probe against the sentry project
+will return metrics for a probe against the sentry project.
+
+If no target is specified, then all of the Sentry projects present in the organization will be scraped.
 
 ### Building with Docker
 

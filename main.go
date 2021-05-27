@@ -50,7 +50,9 @@ type Module struct {
 type HTTPProbe struct {
 	// Defaults to 2xx.
 	ValidStatusCodes []int             `yaml:"valid_status_codes"`
-	Prefix           string            `yaml:"prefix"`
+	Domain           string            `yaml:"domain"`
+	Organization     string            `yaml:"organization"`
+	RateLimit        bool              `yaml:"ratelimit"`
 	Headers          map[string]string `yaml:"headers"`
 }
 
@@ -83,10 +85,6 @@ func (sc *SafeConfig) reloadConfig(confFile string) (err error) {
 func probeHandler(w http.ResponseWriter, r *http.Request, conf *Config) {
 	params := r.URL.Query()
 	target := params.Get("target")
-	if target == "" {
-		http.Error(w, "Target parameter is missing", 400)
-		return
-	}
 
 	moduleName := params.Get("module")
 	if moduleName == "" {
@@ -189,7 +187,8 @@ func main() {
             <head><title>Sentry Exporter</title></head>
             <body>
             <h1>Sentry Exporter</h1>
-            <p><a href="/probe?target=apimutate">Probe sentry project</a></p>
+            <p><a href="/probe?target=apimutate">Probe specific Sentry project</a></p>
+			<p><a href="/probe">Probe all Sentry projects</a></p>
             <p><a href="/metrics">Metrics</a></p>
             </body>
 			</html>`))
