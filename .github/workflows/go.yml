@@ -1,0 +1,31 @@
+name: Go
+
+on:
+  push:
+    branches: '*'
+  pull_request:
+    branches: '*'
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.15
+
+    - name: Build
+      run: go build -o sentry_exporter -v ./...
+
+    - name: Test
+      run: go test -v ./...
+
+    - name: Upload amd64 binary
+      uses: actions/upload-artifact@v1
+      with:
+        name: sentry_exporter-amd64
+        path: sentry_exporter
