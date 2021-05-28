@@ -43,52 +43,55 @@ type ProjectListResponse struct {
 	Slug string
 }
 
-func extractRateLimit(reader io.Reader) float64 {
+func extractRateLimit(reader io.Reader) (float64, error) {
 	var keys []ProjectKeyResponse
 	body, err := ioutil.ReadAll(reader)
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	err = json.Unmarshal([]byte(body), &keys)
-	if err != nil || len(keys) == 0 || keys[0].RateLimit == nil {
-		return 0
+	if err != nil {
+		return 0, err
 	}
-	return float64(keys[0].RateLimit.Count) / float64(keys[0].RateLimit.Window)
+	if len(keys) == 0 || keys[0].RateLimit == nil {
+		return 0, nil
+	}
+	return float64(keys[0].RateLimit.Count) / float64(keys[0].RateLimit.Window), nil
 }
 
-func extractErrorRate(reader io.Reader) int {
+func extractErrorRate(reader io.Reader) (int, error) {
 	var stats [][]int
 	count := 0
 	body, err := ioutil.ReadAll(reader)
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	err = json.Unmarshal([]byte(body), &stats)
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	// ignore the last timestamp
 	for i := 0; i < len(stats)-1; i++ {
 		count = count + stats[i][1]
 	}
-	return count
+	return count, nil
 }
 
-func extractSentryProjects(reader io.Reader) []string {
+func extractSentryProjects(reader io.Reader) ([]string, error) {
 	var resp []ProjectListResponse
 	var projects []string
 	body, err := ioutil.ReadAll(reader)
 	if err != nil {
-		return projects
+		return projects, err
 	}
 	err = json.Unmarshal([]byte(body), &resp)
 	if err != nil {
-		return projects
+		return projects, err
 	}
 	for _, p := range resp {
 		projects = append(projects, p.Slug)
 	}
-	return projects
+	return projects, nil
 }
 
 func requestSentry(path string, config HTTPProbe, client *http.Client) (*http.Response, error) {
@@ -120,55 +123,81 @@ func requestSentry(path string, config HTTPProbe, client *http.Client) (*http.Re
 				}
 			}
 		} else if 200 <= resp.StatusCode && resp.StatusCode < 300 {
+			log.Infof("received %d from %s\n", resp.StatusCode, requestURL)
 			return resp, nil
 		}
 	}
 	return &http.Response{}, errors.New("Invalid response from Sentry API")
 }
 
-func requestEventCount(target string, stat string, config HTTPProbe, client *http.Client, w http.ResponseWriter) {
+func requestEventCount(target string, stat string, config HTTPProbe, client *http.Client, w http.ResponseWriter) error {
 	// Get the last minute stats
 	var lastMin = strconv.FormatInt(time.Now().Unix()-60, 10)
 	resp, err := requestSentry("projects/"+config.Organization+"/"+target+"/stats/?resolution=10s&stat="+stat+"&since="+lastMin, config, client)
 
+	var rate int
 	if err == nil {
 		defer resp.Body.Close()
-		fmt.Fprintf(w, "sentry_events_total{stat=\""+stat+"\",project=\""+target+"\"} %d\n", extractErrorRate(resp.Body))
+		rate, err = extractErrorRate(resp.Body)
+		fmt.Fprintf(w, "sentry_events_total{stat=\""+stat+"\",project=\""+target+"\"} %d\n", rate)
+	} else {
+		log.Error(err)
 	}
+	return err
 }
 
-func requestRateLimit(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter) {
+func requestRateLimit(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter) error {
 	resp, err := requestSentry("projects/"+config.Organization+"/"+target+"/keys/", config, client)
 
+	var rate float64
 	if err == nil {
 		defer resp.Body.Close()
-		fmt.Fprintf(w, "sentry_rate_limit_seconds_total{project=\""+target+"\"} %f\n", extractRateLimit(resp.Body))
+		rate, err = extractRateLimit(resp.Body)
+		fmt.Fprintf(w, "sentry_rate_limit_seconds_total{project=\""+target+"\"} %f\n", rate)
+	} else {
+		log.Error(err)
 	}
+	return err
 }
 
-func allSentryProjects(config HTTPProbe, client *http.Client, w http.ResponseWriter) []string {
+func allSentryProjects(config HTTPProbe, client *http.Client, failures *int, w http.ResponseWriter) []string {
 	resp, err := requestSentry("organizations/"+config.Organization+"/projects/", config, client)
 
+	var projects []string
 	if err == nil {
-		projects := extractSentryProjects(resp.Body)
+		projects, err = extractSentryProjects(resp.Body)
 		fmt.Fprintf(w, "sentry_projects_total %d\n", len(projects))
-		return projects
+	} else {
+		log.Error(err)
+		*failures++
 	}
 
-	return []string{}
+	return projects
 }
 
-func probeProject(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter, wg *sync.WaitGroup) {
+func probeProject(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter, failures *int, wg *sync.WaitGroup) {
 	defer wg.Done()
-	requestEventCount(target, "received", config, client, w)
-	requestEventCount(target, "rejected", config, client, w)
+	var err error
+
+	err = requestEventCount(target, "received", config, client, w)
+	if err != nil {
+		*failures++
+	}
+	err = requestEventCount(target, "rejected", config, client, w)
+	if err != nil {
+		*failures++
+	}
 	if config.RateLimit {
-		requestRateLimit(target, config, client, w)
+		err = requestRateLimit(target, config, client, w)
+		if err != nil {
+			*failures++
+		}
 	}
 	log.Infof("Processed project %s\n", target)
 }
 
 var allProjectsCache []string
+var timesSinceUpdate = 0
 
 func probeHTTP(target string, w http.ResponseWriter, module Module) bool {
 	config := module.HTTP
@@ -177,20 +206,24 @@ func probeHTTP(target string, w http.ResponseWriter, module Module) bool {
 		Timeout: module.Timeout,
 	}
 
+	failures := 0
+
 	var targets []string
 	if target != "" {
 		targets = append(targets, target)
-	} else if len(allProjectsCache) == 0 {
-		targets = allSentryProjects(config, client, w)
+	} else if len(allProjectsCache) == 0 || timesSinceUpdate > 50 {
+		targets = allSentryProjects(config, client, &failures, w)
+		timesSinceUpdate = 0
 	} else {
 		targets = allProjectsCache
+		timesSinceUpdate++
 	}
 	log.Infof("Processing probe for %d Sentry projects\n", len(targets))
 
 	var wg sync.WaitGroup
 	for _, t := range targets {
 		wg.Add(1)
-		go probeProject(t, config, client, w, &wg)
+		go probeProject(t, config, client, w, &failures, &wg)
 		time.Sleep(50 * time.Millisecond)
 	}
 
