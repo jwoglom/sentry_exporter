@@ -2,7 +2,7 @@ go:
     verbose: true
     version: 1.13
 repository:
-    path: github.com/strike-team/sentry_exporter
+    path: github.com/jwoglom/sentry_exporter
 build:
     flags: -mod=vendor -a -tags netgo
     ldflags: |
