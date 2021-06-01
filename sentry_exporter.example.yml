@@ -1,6 +1,5 @@
 modules:
   sentry:
-    prober: http
     timeout: 5s
     http:
       domain: https://your-sentry-url

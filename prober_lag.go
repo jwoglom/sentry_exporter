@@ -14,13 +14,12 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -37,10 +36,6 @@ type ProjectKeyResponse struct {
 	Name      string
 	Label     string
 	RateLimit *RateLimitResponse
-}
-
-type ProjectListResponse struct {
-	Slug string
 }
 
 func extractRateLimit(reader io.Reader) (float64, error) {
@@ -82,60 +77,6 @@ func extractErrorRate(reader io.Reader) (int, int, error) {
 	}
 	return count, latestTimestamp, nil
 }
-
-func extractSentryProjects(reader io.Reader) ([]string, error) {
-	var resp []ProjectListResponse
-	var projects []string
-	body, err := ioutil.ReadAll(reader)
-	if err != nil {
-		return projects, err
-	}
-	err = json.Unmarshal([]byte(body), &resp)
-	if err != nil {
-		return projects, err
-	}
-	for _, p := range resp {
-		projects = append(projects, p.Slug)
-	}
-	return projects, nil
-}
-
-func requestSentry(path string, config HTTPProbe, client *http.Client) (*http.Response, error) {
-	requestURL := config.Domain + "/api/0/" + path
-
-	request, err := http.NewRequest("GET", requestURL, nil)
-	if err != nil {
-		log.Errorf("Error creating request for target %s: %s", path, err)
-		return &http.Response{}, err
-	}
-
-	for key, value := range config.Headers {
-		if strings.Title(key) == "Host" {
-			request.Host = value
-			continue
-		}
-		request.Header.Set(key, value)
-	}
-
-	resp, err := client.Do(request)
-	// Err won't be nil if redirects were turned off. See https://github.com/golang/go/issues/3795
-	if err != nil {
-		log.Warnf("Error for HTTP request to %s: %s", path, err)
-	} else {
-		if len(config.ValidStatusCodes) != 0 {
-			for _, code := range config.ValidStatusCodes {
-				if resp.StatusCode == code {
-					return resp, nil
-				}
-			}
-		} else if 200 <= resp.StatusCode && resp.StatusCode < 300 {
-			log.Infof("received %d from %s\n", resp.StatusCode, requestURL)
-			return resp, nil
-		}
-	}
-	return &http.Response{}, errors.New("Invalid response from Sentry API")
-}
-
 func generateLag(latestTimestamp int) int64 {
 	return time.Now().Unix() - int64(latestTimestamp)
 }
@@ -176,22 +117,9 @@ func requestRateLimit(target string, config HTTPProbe, client *http.Client, w ht
 	return err
 }
 
-func allSentryProjects(config HTTPProbe, client *http.Client, failures *int, w http.ResponseWriter) []string {
-	resp, err := requestSentry("organizations/"+config.Organization+"/projects/", config, client)
-
-	var projects []string
-	if err == nil {
-		projects, err = extractSentryProjects(resp.Body)
-		fmt.Fprintf(w, "sentry_projects_total %d\n", len(projects))
-	} else {
-		log.Error(err)
-		*failures++
-	}
-
-	return projects
-}
-
-func probeProject(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter, failures *int, lastTsChan chan<- int, wg *sync.WaitGroup) {
+// probeProjectLag writes Prometheus metrics on the count of issues processed for each
+// Sentry project as well as the observed lag in processing issues for those projects
+func probeProjectLag(target string, config HTTPProbe, client *http.Client, w http.ResponseWriter, failures *int, lastTsChan chan<- int, wg *sync.WaitGroup) {
 	defer wg.Done()
 	var err error
 	var latestTimestamp int
@@ -210,39 +138,30 @@ func probeProject(target string, config HTTPProbe, client *http.Client, w http.R
 			*failures++
 		}
 	}
-	log.Infof("Processed project %s\n", target)
+	log.Debugf("Processed project %s\n", target)
 	lastTsChan <- latestTimestamp
 }
 
-var allProjectsCache []string
-var timesSinceUpdate = 0
-
-func probeHTTP(target string, w http.ResponseWriter, module Module) bool {
+func probeHTTPLag(values url.Values, w http.ResponseWriter, module Module) bool {
+	target := values.Get("target")
 	config := module.HTTP
-
-	client := &http.Client{
-		Timeout: module.Timeout,
-	}
+	client := clientWithTimeout(values, module)
 
 	failures := 0
 
 	var targets []string
 	if target != "" {
 		targets = append(targets, target)
-	} else if len(allProjectsCache) == 0 || timesSinceUpdate > 50 {
-		targets = allSentryProjects(config, client, &failures, w)
-		timesSinceUpdate = 0
 	} else {
-		targets = allProjectsCache
-		timesSinceUpdate++
+		targets = getOrUpdateProjectsList(config, client, &failures, w)
 	}
-	log.Infof("Processing probe for %d Sentry projects\n", len(targets))
+	log.Infof("Processing lag probe for %d Sentry projects\n", len(targets))
 
 	var wg sync.WaitGroup
 	ch := make(chan int, len(targets))
 	for _, t := range targets {
 		wg.Add(1)
-		go probeProject(t, config, client, w, &failures, ch, &wg)
+		go probeProjectLag(t, config, client, w, &failures, ch, &wg)
 		time.Sleep(50 * time.Millisecond)
 	}
 
@@ -263,6 +182,8 @@ func probeHTTP(target string, w http.ResponseWriter, module Module) bool {
 		fmt.Fprintf(w, "sentry_events_lag_seconds %d\n", generateLag(latestTimestamp))
 	}
 	fmt.Fprintf(w, "sentry_fetch_failures %d\n", failures)
+
+	log.Infof("Processed probe with %d fetch failures\n", failures)
 
 	return true
 }

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -42,7 +43,6 @@ type SafeConfig struct {
 }
 
 type Module struct {
-	Prober  string        `yaml:"prober"`
 	Timeout time.Duration `yaml:"timeout"`
 	HTTP    HTTPProbe     `yaml:"http"`
 }
@@ -56,8 +56,9 @@ type HTTPProbe struct {
 	Headers          map[string]string `yaml:"headers"`
 }
 
-var Probers = map[string]func(string, http.ResponseWriter, Module) bool{
-	"http": probeHTTP,
+var Probers = map[string]func(url.Values, http.ResponseWriter, Module) bool{
+	"lag":    probeHTTPLag,
+	"issues": probeHTTPIssues,
 }
 
 func (sc *SafeConfig) reloadConfig(confFile string) (err error) {
@@ -84,7 +85,6 @@ func (sc *SafeConfig) reloadConfig(confFile string) (err error) {
 
 func probeHandler(w http.ResponseWriter, r *http.Request, conf *Config) {
 	params := r.URL.Query()
-	target := params.Get("target")
 
 	moduleName := params.Get("module")
 	if moduleName == "" {
@@ -95,14 +95,18 @@ func probeHandler(w http.ResponseWriter, r *http.Request, conf *Config) {
 		http.Error(w, fmt.Sprintf("Unknown module %q", moduleName), 400)
 		return
 	}
-	prober, ok := Probers[module.Prober]
+	proberName := params.Get("prober")
+	if moduleName == "" {
+		moduleName = "http_lag"
+	}
+	prober, ok := Probers[proberName]
 	if !ok {
-		http.Error(w, fmt.Sprintf("Unknown prober %q", module.Prober), 400)
+		http.Error(w, fmt.Sprintf("Unknown prober %q", proberName), 400)
 		return
 	}
 
 	start := time.Now()
-	success := prober(target, w, module)
+	success := prober(params, w, module)
 	fmt.Fprintf(w, "probe_duration_seconds %f\n", time.Since(start).Seconds())
 	if success {
 		fmt.Fprintln(w, "probe_success 1")
