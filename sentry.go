@@ -66,7 +66,8 @@ func requestSentry(path string, config HTTPProbe, client *http.Client) (*http.Re
 			return resp, nil
 		}
 	}
-	return &http.Response{}, errors.New(fmt.Sprintf("Invalid response from Sentry API: %d", resp.StatusCode))
+	r, _ := ioutil.ReadAll(resp.Body)
+	return &http.Response{}, errors.New(fmt.Sprintf("Invalid response from Sentry API: %d\n%s", resp.StatusCode, string(r)))
 }
 
 func getSentryNextCursor(resp *http.Response) (string, error) {

@@ -132,7 +132,7 @@ func probeProjectLag(target string, config HTTPProbe, client *http.Client, w htt
 	if err != nil {
 		*failures++
 	}
-	if config.RateLimit {
+	if config.Lag.RateLimit {
 		err = requestRateLimit(target, config, client, w)
 		if err != nil {
 			*failures++
@@ -145,7 +145,7 @@ func probeProjectLag(target string, config HTTPProbe, client *http.Client, w htt
 func probeHTTPLag(values url.Values, w http.ResponseWriter, module Module) bool {
 	target := values.Get("target")
 	config := module.HTTP
-	client := clientWithTimeout(values, module.HTTP.Lag.Timeout)
+	client := clientWithTimeout(values, config.Lag.Timeout)
 
 	failures := 0
 

@@ -51,7 +51,6 @@ type HTTPProbe struct {
 	ValidStatusCodes []int             `yaml:"valid_status_codes"`
 	Domain           string            `yaml:"domain"`
 	Organization     string            `yaml:"organization"`
-	RateLimit        bool              `yaml:"ratelimit"`
 	Headers          map[string]string `yaml:"headers"`
 	Issues           IssuesOptions     `yaml:"issues"`
 	Lag              LagOptions        `yaml:"lag"`
@@ -64,7 +63,8 @@ type IssuesOptions struct {
 }
 
 type LagOptions struct {
-	Timeout time.Duration `yaml:"timeout"`
+	Timeout   time.Duration `yaml:"timeout"`
+	RateLimit bool          `yaml:"ratelimit"`
 }
 
 var Probers = map[string]func(url.Values, http.ResponseWriter, Module) bool{

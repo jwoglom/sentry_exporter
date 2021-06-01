@@ -3,7 +3,6 @@ modules:
     http:
       domain: https://your-sentry-url
       organization: sentry
-      ratelimit: false
       headers:
         Authorization: Bearer input-sentry-token-here
       issues:
@@ -12,3 +11,4 @@ modules:
         above: 10000
       lag:
         timeout: 30s
+        ratelimit: false

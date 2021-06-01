@@ -78,6 +78,10 @@ func getIssuesListByFreq(thresh int, statsPeriod, extra string, config HTTPProbe
 		allIds = append(allIds, issue.Id)
 	}
 
+	if len(allIds) == 0 {
+		return countPerProject, nextExtra, nil
+	}
+
 	countPerIssueIds, err := getIssueCountForIds(allIds, statsPeriod, config, client)
 	if err != nil {
 		log.Error(err)
@@ -190,7 +194,7 @@ func clientWithTimeout(values url.Values, timeout time.Duration) *http.Client {
 // at high frequency
 func probeHTTPIssues(values url.Values, w http.ResponseWriter, module Module) bool {
 	config := module.HTTP
-	client := clientWithTimeout(values, module.HTTP.Issues.Timeout)
+	client := clientWithTimeout(values, config.Issues.Timeout)
 
 	above := 10000
 	if a := config.Issues.Above; a > 0 {
@@ -201,7 +205,7 @@ func probeHTTPIssues(values url.Values, w http.ResponseWriter, module Module) bo
 	}
 
 	period := "14d"
-	if p := module.HTTP.Issues.Period; p != "" {
+	if p := config.Issues.Period; p != "" {
 		period = p
 	}
 	if p := values.Get("period"); p != "" {
