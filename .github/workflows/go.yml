@@ -29,3 +29,20 @@ jobs:
       with:
         name: sentry_exporter-amd64
         path: sentry_exporter
+
+    - name: docker login
+      env:
+        DOCKER_USER: ${{secrets.DOCKER_USER}}
+        DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
+      run: |
+        docker login -u $DOCKER_USER -p $DOCKER_PASSWORD 
+
+    - name: Copy built binary
+      run: |
+        cp sentry_exporter .build/linux-amd64/sentry_exporter
+
+    - name: Build the Docker image
+      run: DOCKER_ARCHS=amd64 docker build . --file Dockerfile --tag jwoglom/sentry_exporter:latest
+      
+    - name: Docker Push
+      run: docker push jwoglom/sentry_exporter
