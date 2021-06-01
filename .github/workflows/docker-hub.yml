@@ -15,6 +15,13 @@ jobs:
         DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
       run: |
         docker login -u $DOCKER_USER -p $DOCKER_PASSWORD 
+    - name: Download promu binary
+      run: |
+        wget https://github.com/prometheus/promu/releases/download/v0.12.0/promu-0.12.0.linux-amd64.tar.gz -O-|tar xvf -
+    - name: Run promu
+      run: |
+        chmod +x promu-0.12.0.linux-amd64/promu
+        promu-0.12.0.linux-amd64/promu crossbuild -p linux/amd64
     - name: Run make docker
       run: make docker
     - name: Build the Docker image
