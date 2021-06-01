@@ -39,6 +39,7 @@ jobs:
 
     - name: Copy built binary
       run: |
+        mkdir -p .build/linux-amd64
         cp sentry_exporter .build/linux-amd64/sentry_exporter
 
     - name: Build the Docker image
