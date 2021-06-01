@@ -1,9 +1,14 @@
 modules:
   sentry:
-    timeout: 5s
     http:
       domain: https://your-sentry-url
       organization: sentry
       ratelimit: false
       headers:
         Authorization: Bearer input-sentry-token-here
+      issues:
+        timeout: 60s
+        period: 24h
+        above: 10000
+      lag:
+        timeout: 30s

@@ -172,9 +172,9 @@ func getIssueCountForIds(ids []string, statsPeriod string, config HTTPProbe, cli
 	return ret, nil
 }
 
-func clientWithTimeout(values url.Values, module Module) *http.Client {
+func clientWithTimeout(values url.Values, timeout time.Duration) *http.Client {
 	c := &http.Client{
-		Timeout: module.Timeout,
+		Timeout: timeout,
 	}
 
 	if timeout := values.Get("timeout"); timeout != "" {
@@ -190,16 +190,22 @@ func clientWithTimeout(values url.Values, module Module) *http.Client {
 // at high frequency
 func probeHTTPIssues(values url.Values, w http.ResponseWriter, module Module) bool {
 	config := module.HTTP
-	client := clientWithTimeout(values, module)
+	client := clientWithTimeout(values, module.HTTP.Issues.Timeout)
 
-	above, _ := strconv.Atoi(values.Get("above"))
-	if above == 0 {
-		above = 10000
+	above := 10000
+	if a := config.Issues.Above; a > 0 {
+		above = a
+	}
+	if a := values.Get("above"); a != "" {
+		above, _ = strconv.Atoi(a)
 	}
 
-	period := values.Get("period")
-	if period == "" {
-		period = "14d"
+	period := "14d"
+	if p := module.HTTP.Issues.Period; p != "" {
+		period = p
+	}
+	if p := values.Get("period"); p != "" {
+		period = p
 	}
 	if period != "14d" && period != "24h" {
 		log.Error("Invalid period (must be 14d or 24h)")

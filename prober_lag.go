@@ -145,7 +145,7 @@ func probeProjectLag(target string, config HTTPProbe, client *http.Client, w htt
 func probeHTTPLag(values url.Values, w http.ResponseWriter, module Module) bool {
 	target := values.Get("target")
 	config := module.HTTP
-	client := clientWithTimeout(values, module)
+	client := clientWithTimeout(values, module.HTTP.Lag.Timeout)
 
 	failures := 0
 

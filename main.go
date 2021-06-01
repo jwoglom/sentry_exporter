@@ -43,8 +43,7 @@ type SafeConfig struct {
 }
 
 type Module struct {
-	Timeout time.Duration `yaml:"timeout"`
-	HTTP    HTTPProbe     `yaml:"http"`
+	HTTP HTTPProbe `yaml:"http"`
 }
 
 type HTTPProbe struct {
@@ -54,6 +53,18 @@ type HTTPProbe struct {
 	Organization     string            `yaml:"organization"`
 	RateLimit        bool              `yaml:"ratelimit"`
 	Headers          map[string]string `yaml:"headers"`
+	Issues           IssuesOptions     `yaml:"issues"`
+	Lag              LagOptions        `yaml:"lag"`
+}
+
+type IssuesOptions struct {
+	Timeout time.Duration `yaml:"timeout"`
+	Period  string        `yaml:"period"`
+	Above   int           `yaml:"above"`
+}
+
+type LagOptions struct {
+	Timeout time.Duration `yaml:"timeout"`
 }
 
 var Probers = map[string]func(url.Values, http.ResponseWriter, Module) bool{
@@ -105,6 +116,7 @@ func probeHandler(w http.ResponseWriter, r *http.Request, conf *Config) {
 		return
 	}
 
+	log.Infof("Starting prober %s with params %#+v\n", proberName, params)
 	start := time.Now()
 	success := prober(params, w, module)
 	fmt.Fprintf(w, "probe_duration_seconds %f\n", time.Since(start).Seconds())
