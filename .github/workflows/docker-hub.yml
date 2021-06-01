@@ -17,7 +17,7 @@ jobs:
         docker login -u $DOCKER_USER -p $DOCKER_PASSWORD 
     - name: Download promu binary
       run: |
-        wget https://github.com/prometheus/promu/releases/download/v0.12.0/promu-0.12.0.linux-amd64.tar.gz -O-|tar xvf -
+        wget https://github.com/prometheus/promu/releases/download/v0.12.0/promu-0.12.0.linux-amd64.tar.gz -O-|tar xvzf -
     - name: Run promu
       run: |
         chmod +x promu-0.12.0.linux-amd64/promu
