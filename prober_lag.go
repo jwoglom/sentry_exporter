@@ -92,7 +92,7 @@ func requestEventCount(target string, stat string, config HTTPProbe, client *htt
 		defer resp.Body.Close()
 		rate, latestTimestamp, err = extractErrorRate(resp.Body)
 		lag := generateLag(latestTimestamp)
-		fmt.Fprintf(w, "sentry_events_total{stat=\""+stat+"\",project=\""+target+"\"} %d\n", rate)
+		fmt.Fprintf(w, "sentry_events_1h_total{stat=\""+stat+"\",project=\""+target+"\"} %d\n", rate)
 		if latestTimestamp > 0 {
 			fmt.Fprintf(w, "sentry_project_latest_timestamp{stat=\""+stat+"\",project=\""+target+"\"} %d\n", latestTimestamp)
 			fmt.Fprintf(w, "sentry_project_lag_seconds{stat=\""+stat+"\",project=\""+target+"\"} %d\n", lag)
